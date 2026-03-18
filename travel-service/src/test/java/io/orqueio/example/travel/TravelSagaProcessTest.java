@@ -2,7 +2,6 @@ package io.orqueio.example.travel;
 
 import io.orqueio.bpm.engine.RuntimeService;
 import io.orqueio.bpm.engine.runtime.ProcessInstance;
-import io.orqueio.bpm.engine.test.Deployment;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,73 +27,79 @@ class TravelSagaProcessTest {
     @Autowired
     private RuntimeService runtimeService;
 
+    private Map<String, Object> createVariables(String bookingId, String travelerName,
+                                                 String destination, String departureDate,
+                                                 String returnDate, int passengers, double budget) {
+        Map<String, Object> variables = new HashMap<>();
+        variables.put("bookingId", bookingId);
+        variables.put("travelerName", travelerName);
+        variables.put("destination", destination);
+        variables.put("departureDate", departureDate);
+        variables.put("returnDate", returnDate);
+        variables.put("passengers", passengers);
+        variables.put("budget", budget);
+        return variables;
+    }
+
+    /**
+     * Find the callworker subprocess instance spawned by a parent process.
+     * The message catch events live in the subprocess, so correlation must target it.
+     */
+    private String findCallWorkerSubProcessId(String parentProcessId) {
+        ProcessInstance subProcess = runtimeService.createProcessInstanceQuery()
+                .superProcessInstanceId(parentProcessId)
+                .singleResult();
+        assertNotNull(subProcess, "Call Worker subprocess should be active");
+        return subProcess.getId();
+    }
+
     @Test
-    @DisplayName("Saga process should start and send flight command")
+    @DisplayName("Saga process should start and send flight command via Call Worker")
     void shouldStartSagaProcess() {
         // Given
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("bookingId", "TEST-001");
-        variables.put("travelerName", "Alice");
-        variables.put("destination", "Paris");
-        variables.put("departureDate", "2026-07-15");
-        variables.put("returnDate", "2026-07-22");
-        variables.put("passengers", 2);
-        variables.put("budget", 2000.0);
+        Map<String, Object> variables = createVariables(
+                "TEST-001", "Alice", "Paris", "2026-07-15", "2026-07-22", 2, 2000.0);
 
         // When - start the process
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 "travel-saga", "TEST-001", variables);
 
-        // Then - process should be started and waiting at FlightResponse message catch event
+        // Then - process should be started and waiting inside the callworker subprocess
         assertNotNull(processInstance);
         assertFalse(processInstance.isEnded());
+
+        // A callworker subprocess should be active
+        String subProcessId = findCallWorkerSubProcessId(processInstance.getId());
+        assertNotNull(subProcessId);
     }
 
     @Test
     @DisplayName("Happy path: all services succeed → process completes")
     void happyPath_allServicesSucceed() {
         // Given
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("bookingId", "TEST-HAPPY");
-        variables.put("travelerName", "Bob");
-        variables.put("destination", "Tokyo");
-        variables.put("departureDate", "2026-08-01");
-        variables.put("returnDate", "2026-08-07");
-        variables.put("passengers", 1);
-        variables.put("budget", 3000.0);
+        Map<String, Object> variables = createVariables(
+                "TEST-HAPPY", "Bob", "Tokyo", "2026-08-01", "2026-08-07", 1, 3000.0);
 
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 "travel-saga", "TEST-HAPPY", variables);
         String processId = processInstance.getId();
 
-        // When - simulate FlightResponse success
-        runtimeService.createMessageCorrelation("FlightResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Flight FL-TEST booked")
-                .correlate();
+        // Flight OK → correlate to the callworker subprocess
+        correlateOkToSubProcess(processId);
 
-        // Then - process should be waiting for HotelResponse
+        // Then - process should still be running (waiting for hotel in next callworker)
         assertNotNull(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processId).singleResult());
 
-        // When - simulate HotelResponse success
-        runtimeService.createMessageCorrelation("HotelResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Hotel HTL-TEST booked")
-                .correlate();
+        // Hotel OK
+        correlateOkToSubProcess(processId);
 
-        // Then - process should be waiting for CarRentalResponse
+        // Then - process should still be running (waiting for car)
         assertNotNull(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processId).singleResult());
 
-        // When - simulate CarRentalResponse success
-        runtimeService.createMessageCorrelation("CarRentalResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Car CAR-TEST rented")
-                .correlate();
+        // Car OK
+        correlateOkToSubProcess(processId);
 
         // Then - process should be completed (End_Success)
         assertNull(runtimeService.createProcessInstanceQuery()
@@ -106,28 +111,17 @@ class TravelSagaProcessTest {
     @DisplayName("Flight failure: process ends immediately without compensation")
     void flightFailure_noCompensation() {
         // Given
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("bookingId", "TEST-FLIGHT-FAIL");
-        variables.put("travelerName", "Diana");
-        variables.put("destination", "Mars");
-        variables.put("departureDate", "2026-10-01");
-        variables.put("returnDate", "2026-10-07");
-        variables.put("passengers", 1);
-        variables.put("budget", 5000.0);
+        Map<String, Object> variables = createVariables(
+                "TEST-FLIGHT-FAIL", "Diana", "Mars", "2026-10-01", "2026-10-07", 1, 5000.0);
 
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 "travel-saga", "TEST-FLIGHT-FAIL", variables);
         String processId = processInstance.getId();
 
-        // When - simulate FlightResponse failure
-        runtimeService.createMessageCorrelation("FlightResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", false)
-                .setVariable("serviceMessage", "No flights to Mars")
-                .correlate();
+        // Flight KO → boundary error catches CALL_KO, process ends at End_FlightFailed
+        correlateKoToSubProcess(processId);
 
-        // Then - process should be completed immediately (End_FlightFailed)
-        // No compensation needed since nothing was booked before
+        // Then - process should be completed immediately
         assertNull(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processId).singleResult(),
                 "Process should end immediately when flight fails");
@@ -137,35 +131,20 @@ class TravelSagaProcessTest {
     @DisplayName("Hotel failure: flight gets compensated")
     void hotelFailure_flightCompensated() {
         // Given
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("bookingId", "TEST-HOTEL-FAIL");
-        variables.put("travelerName", "Charlie");
-        variables.put("destination", "Dubai");
-        variables.put("departureDate", "2026-09-01");
-        variables.put("returnDate", "2026-09-05");
-        variables.put("passengers", 1);
-        variables.put("budget", 100.0);
+        Map<String, Object> variables = createVariables(
+                "TEST-HOTEL-FAIL", "Charlie", "Dubai", "2026-09-01", "2026-09-05", 1, 100.0);
 
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 "travel-saga", "TEST-HOTEL-FAIL", variables);
         String processId = processInstance.getId();
 
-        // When - simulate FlightResponse success
-        runtimeService.createMessageCorrelation("FlightResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Flight booked to Dubai")
-                .correlate();
+        // Flight success
+        correlateOkToSubProcess(processId);
 
-        // When - simulate HotelResponse failure
-        runtimeService.createMessageCorrelation("HotelResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", false)
-                .setVariable("serviceMessage", "Budget 100 EUR insufficient for Dubai (450 EUR/night)")
-                .correlate();
+        // Hotel failure → boundary error catches CALL_KO → CancelFlight compensation runs
+        correlateKoToSubProcess(processId);
 
-        // Then - CancelFlight compensation runs, then process ends (End_HotelFailed)
-        // The CancelFlightDelegate sends a Kafka command but process continues to end
+        // Then - process ends (End_HotelFailed)
         assertNull(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processId).singleResult(),
                 "Process should complete after hotel fails and flight is compensated");
@@ -175,43 +154,43 @@ class TravelSagaProcessTest {
     @DisplayName("Car rental failure: hotel and flight get compensated in reverse order")
     void carFailure_hotelAndFlightCompensated() {
         // Given
-        Map<String, Object> variables = new HashMap<>();
-        variables.put("bookingId", "TEST-CAR-FAIL");
-        variables.put("travelerName", "Eve");
-        variables.put("destination", "Paris");
-        variables.put("departureDate", "2026-11-01");
-        variables.put("returnDate", "2026-11-07");
-        variables.put("passengers", 1);
-        variables.put("budget", 2000.0);
+        Map<String, Object> variables = createVariables(
+                "TEST-CAR-FAIL", "Eve", "Paris", "2026-11-01", "2026-11-07", 1, 2000.0);
 
         ProcessInstance processInstance = runtimeService.startProcessInstanceByKey(
                 "travel-saga", "TEST-CAR-FAIL", variables);
         String processId = processInstance.getId();
 
         // Flight success
-        runtimeService.createMessageCorrelation("FlightResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Flight booked")
-                .correlate();
+        correlateOkToSubProcess(processId);
 
         // Hotel success
-        runtimeService.createMessageCorrelation("HotelResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", true)
-                .setVariable("serviceMessage", "Hotel booked")
-                .correlate();
+        correlateOkToSubProcess(processId);
 
-        // Car rental failure
-        runtimeService.createMessageCorrelation("CarRentalResponse")
-                .processInstanceId(processId)
-                .setVariable("serviceSuccess", false)
-                .setVariable("serviceMessage", "No cars available")
-                .correlate();
+        // Car failure → CancelHotel then CancelFlight compensations
+        correlateKoToSubProcess(processId);
 
-        // Then - CancelHotel then CancelFlight compensations run, process ends (End_CarFailed)
+        // Then - process ends (End_CarFailed)
         assertNull(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processId).singleResult(),
                 "Process should complete after car fails and hotel+flight are compensated");
+    }
+
+    private void correlateOkToSubProcess(String parentProcessId) {
+        String subProcessId = findCallWorkerSubProcessId(parentProcessId);
+        runtimeService.createMessageCorrelation("return-call-ok-message")
+                .processInstanceId(subProcessId)
+                .setVariable("serviceSuccess", true)
+                .setVariable("serviceMessage", "Service completed successfully")
+                .correlate();
+    }
+
+    private void correlateKoToSubProcess(String parentProcessId) {
+        String subProcessId = findCallWorkerSubProcessId(parentProcessId);
+        runtimeService.createMessageCorrelation("return-call-ko-message")
+                .processInstanceId(subProcessId)
+                .setVariable("serviceSuccess", false)
+                .setVariable("serviceMessage", "Service failed")
+                .correlate();
     }
 }
