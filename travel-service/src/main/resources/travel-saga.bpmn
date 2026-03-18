@@ -146,92 +146,106 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="travel-saga">
 
-      <!-- Start -->
+      <!-- ===== HAPPY PATH (row 1, y~200) ===== -->
       <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent">
-        <dc:Bounds x="60" y="260" width="36" height="36"/>
+        <dc:Bounds x="80" y="202" width="36" height="36"/>
       </bpmndi:BPMNShape>
-
-      <!-- Flight Call Activity -->
       <bpmndi:BPMNShape id="CallFlight_di" bpmnElement="CallFlight">
-        <dc:Bounds x="160" y="238" width="100" height="80"/>
+        <dc:Bounds x="200" y="180" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="BoundaryError_Flight_di" bpmnElement="BoundaryError_Flight">
-        <dc:Bounds x="192" y="300" width="36" height="36"/>
+      <bpmndi:BPMNShape id="CallHotel_di" bpmnElement="CallHotel">
+        <dc:Bounds x="420" y="180" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_FlightFailed_di" bpmnElement="End_FlightFailed">
-        <dc:Bounds x="192" y="400" width="36" height="36"/>
+      <bpmndi:BPMNShape id="CallCar_di" bpmnElement="CallCar">
+        <dc:Bounds x="640" y="180" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="822" y="202" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- Hotel Call Activity -->
-      <bpmndi:BPMNShape id="CallHotel_di" bpmnElement="CallHotel">
-        <dc:Bounds x="330" y="238" width="100" height="80"/>
+      <!-- ===== BOUNDARY ERROR EVENTS ===== -->
+      <bpmndi:BPMNShape id="BoundaryError_Flight_di" bpmnElement="BoundaryError_Flight">
+        <dc:Bounds x="232" y="242" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BoundaryError_Hotel_di" bpmnElement="BoundaryError_Hotel">
-        <dc:Bounds x="362" y="300" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Hotel compensation -->
-      <bpmndi:BPMNShape id="CancelFlight_FromHotel_di" bpmnElement="CancelFlight_FromHotel">
-        <dc:Bounds x="330" y="400" width="100" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_HotelFailed_di" bpmnElement="End_HotelFailed">
-        <dc:Bounds x="490" y="422" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Car Call Activity -->
-      <bpmndi:BPMNShape id="CallCar_di" bpmnElement="CallCar">
-        <dc:Bounds x="500" y="238" width="100" height="80"/>
+        <dc:Bounds x="452" y="242" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="BoundaryError_Car_di" bpmnElement="BoundaryError_Car">
-        <dc:Bounds x="532" y="300" width="36" height="36"/>
+        <dc:Bounds x="672" y="242" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- Car compensation -->
+      <!-- ===== FLIGHT FAILURE (row 2 left, y~370) ===== -->
+      <bpmndi:BPMNShape id="End_FlightFailed_di" bpmnElement="End_FlightFailed">
+        <dc:Bounds x="232" y="370" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- ===== HOTEL FAILURE: Cancel Flight → End (row 2 center, y~370) ===== -->
+      <bpmndi:BPMNShape id="CancelFlight_FromHotel_di" bpmnElement="CancelFlight_FromHotel">
+        <dc:Bounds x="420" y="350" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_HotelFailed_di" bpmnElement="End_HotelFailed">
+        <dc:Bounds x="582" y="372" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- ===== CAR FAILURE: Cancel Hotel → Cancel Flight → End (row 2-3 right) ===== -->
       <bpmndi:BPMNShape id="CancelHotel_di" bpmnElement="CancelHotel">
-        <dc:Bounds x="500" y="400" width="100" height="80"/>
+        <dc:Bounds x="700" y="350" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="CancelFlight_FromCar_di" bpmnElement="CancelFlight_FromCar">
-        <dc:Bounds x="500" y="520" width="100" height="80"/>
+        <dc:Bounds x="700" y="490" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_CarFailed_di" bpmnElement="End_CarFailed">
-        <dc:Bounds x="660" y="542" width="36" height="36"/>
+        <dc:Bounds x="872" y="512" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- End Success -->
-      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
-        <dc:Bounds x="660" y="260" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Edges -->
+      <!-- ===== EDGES: Happy path ===== -->
       <bpmndi:BPMNEdge id="Flow_ToCallFlight_di" bpmnElement="Flow_ToCallFlight">
-        <di:waypoint x="96" y="278"/><di:waypoint x="160" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_FlightFailed_di" bpmnElement="Flow_FlightFailed">
-        <di:waypoint x="210" y="336"/><di:waypoint x="210" y="400"/>
+        <di:waypoint x="116" y="220"/>
+        <di:waypoint x="200" y="220"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToCallHotel_di" bpmnElement="Flow_ToCallHotel">
-        <di:waypoint x="260" y="278"/><di:waypoint x="330" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_HotelFailed_di" bpmnElement="Flow_HotelFailed">
-        <di:waypoint x="380" y="336"/><di:waypoint x="380" y="400"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToEndHotelFailed_di" bpmnElement="Flow_ToEndHotelFailed">
-        <di:waypoint x="430" y="440"/><di:waypoint x="490" y="440"/>
+        <di:waypoint x="300" y="220"/>
+        <di:waypoint x="420" y="220"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToCallCar_di" bpmnElement="Flow_ToCallCar">
-        <di:waypoint x="430" y="278"/><di:waypoint x="500" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_CarFailed_di" bpmnElement="Flow_CarFailed">
-        <di:waypoint x="550" y="336"/><di:waypoint x="550" y="400"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToCancelFlight_FromCar_di" bpmnElement="Flow_ToCancelFlight_FromCar">
-        <di:waypoint x="550" y="480"/><di:waypoint x="550" y="520"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToEndCarFailed_di" bpmnElement="Flow_ToEndCarFailed">
-        <di:waypoint x="600" y="560"/><di:waypoint x="660" y="560"/>
+        <di:waypoint x="520" y="220"/>
+        <di:waypoint x="640" y="220"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToEndSuccess_di" bpmnElement="Flow_ToEndSuccess">
-        <di:waypoint x="600" y="278"/><di:waypoint x="660" y="278"/>
+        <di:waypoint x="740" y="220"/>
+        <di:waypoint x="822" y="220"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- ===== EDGES: Flight failure ===== -->
+      <bpmndi:BPMNEdge id="Flow_FlightFailed_di" bpmnElement="Flow_FlightFailed">
+        <di:waypoint x="250" y="278"/>
+        <di:waypoint x="250" y="370"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- ===== EDGES: Hotel failure → Cancel Flight → End ===== -->
+      <bpmndi:BPMNEdge id="Flow_HotelFailed_di" bpmnElement="Flow_HotelFailed">
+        <di:waypoint x="470" y="278"/>
+        <di:waypoint x="470" y="350"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndHotelFailed_di" bpmnElement="Flow_ToEndHotelFailed">
+        <di:waypoint x="520" y="390"/>
+        <di:waypoint x="582" y="390"/>
+      </bpmndi:BPMNEdge>
+
+      <!-- ===== EDGES: Car failure → Cancel Hotel → Cancel Flight → End ===== -->
+      <bpmndi:BPMNEdge id="Flow_CarFailed_di" bpmnElement="Flow_CarFailed">
+        <di:waypoint x="690" y="278"/>
+        <di:waypoint x="690" y="330"/>
+        <di:waypoint x="750" y="330"/>
+        <di:waypoint x="750" y="350"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCancelFlight_FromCar_di" bpmnElement="Flow_ToCancelFlight_FromCar">
+        <di:waypoint x="750" y="430"/>
+        <di:waypoint x="750" y="490"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndCarFailed_di" bpmnElement="Flow_ToEndCarFailed">
+        <di:waypoint x="800" y="530"/>
+        <di:waypoint x="872" y="530"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

@@ -11,7 +11,7 @@ Orchestrated Saga pattern for travel booking using **OrqueIO** (BPMN engine) and
                          │    BPMN Saga Process     │
                          └────┬──────┬──────┬───────┘
                               │      │      │
-                         Kafka Topics (async)
+                     Kafka (WorkerMessage / WorkerResponse)
                               │      │      │
                     ┌─────────┘      │      └──────────┐
                     ▼                ▼                  ▼
@@ -24,26 +24,51 @@ Orchestrated Saga pattern for travel booking using **OrqueIO** (BPMN engine) and
 
 ## Saga Flow (BPMN Process)
 
-![Travel Saga Workflow](docs/travel-saga-workflow.png)
+![Travel Saga Workflow](docs/saga-workflow.png)
 
-1. **Book Flight** → Send command to `saga.flight.command` → Wait for `FlightResponse`
-   - *If failed*: End (no compensation needed)
-2. **Book Hotel** → Send command to `saga.hotel.command` → Wait for `HotelResponse`
-   - *If failed*: **Cancel Flight** (compensate) → End
-3. **Rent Car** → Send command to `saga.car.command` → Wait for `CarRentalResponse`
-   - *If failed*: **Cancel Hotel** → **Cancel Flight** (compensate in reverse order) → End
-4. **Success**: All three bookings confirmed
+The parent process (`travel-saga.bpmn`) uses **Call Activities** to invoke a reusable subprocess (`callworker.bpmn`) for each service. This **Call Worker** pattern eliminates BPMN duplication — each Call Activity passes `commandTopic` and `workerAction` via `camunda:in` variables.
+
+```
+Parent process (travel-saga.bpmn)
+  │
+  ├── Call Activity: "Call Flight Worker"  ──► callworker.bpmn
+  │     └── Boundary Error (CALL_KO) → End
+  │
+  ├── Call Activity: "Call Hotel Worker"   ──► callworker.bpmn
+  │     └── Boundary Error (CALL_KO) → Cancel Flight → End
+  │
+  └── Call Activity: "Call Car Worker"     ──► callworker.bpmn
+        └── Boundary Error (CALL_KO) → Cancel Hotel → Cancel Flight → End
+```
+
+The **Call Worker subprocess** (`callworker.bpmn`):
+
+![Call Worker BPMN](docs/callworker_bpmn.png)
+
+```
+Start → Message Producer (Kafka) → Event-Based Gateway
+                                        ├── OK message  → End Success
+                                        └── KO message  → End Error (CALL_KO)
+```
+
+1. **Book Flight** → Call Worker sends `WorkerMessage` to `saga.flight.command` → waits for `WorkerResponse`
+   - *If KO*: End (no compensation needed)
+2. **Book Hotel** → Call Worker sends to `saga.hotel.command` → waits for response
+   - *If KO*: **Cancel Flight** (compensate) → End
+3. **Rent Car** → Call Worker sends to `saga.car.command` → waits for response
+   - *If KO*: **Cancel Hotel** → **Cancel Flight** (compensate in reverse order) → End
+4. **All OK**: Trip booked successfully
 
 ## Kafka Topics
 
 | Topic | Direction | Purpose |
 |-------|-----------|---------|
-| `saga.flight.command` | Travel → Flight | Book or cancel flight |
-| `saga.flight.response` | Flight → Travel | Booking result |
-| `saga.hotel.command` | Travel → Hotel | Book or cancel hotel |
-| `saga.hotel.response` | Hotel → Travel | Booking result |
-| `saga.car.command` | Travel → Car Rental | Rent or cancel car |
-| `saga.car.response` | Car Rental → Travel | Rental result |
+| `saga.flight.command` | Orchestrator → Flight | Book or cancel flight |
+| `saga.flight.response` | Flight → Orchestrator | Booking result |
+| `saga.hotel.command` | Orchestrator → Hotel | Book or cancel hotel |
+| `saga.hotel.response` | Hotel → Orchestrator | Booking result |
+| `saga.car.command` | Orchestrator → Car Rental | Rent or cancel car |
+| `saga.car.response` | Car Rental → Orchestrator | Rental result |
 
 ## Services
 
@@ -134,9 +159,12 @@ No seats available for "Mars" → saga ends immediately.
 
 ## Key Design Patterns
 
+- **Call Worker pattern**: Reusable BPMN subprocess (`callworker.bpmn`) encapsulates the send/wait/handle logic, invoked via Call Activities
+- **Generic messaging**: All Kafka communication uses typed `WorkerMessage` / `WorkerResponse` objects with JSON payload
+- **Typed DTOs**: Each microservice deserializes the payload into its own DTO (`FlightPayload`, `HotelPayload`, `CarRentalPayload`)
 - **Orchestration-based Saga**: OrqueIO (BPMN engine) coordinates the entire transaction
 - **Asynchronous communication**: Kafka decouples services via message topics
-- **Message correlation**: Kafka responses are correlated back to the waiting BPMN process instance
+- **Message correlation**: Kafka responses are correlated back to the waiting BPMN subprocess instance
 - **Compensation in reverse order**: On failure, previously completed steps are undone in reverse
 
 ## OrqueIO Cockpit
