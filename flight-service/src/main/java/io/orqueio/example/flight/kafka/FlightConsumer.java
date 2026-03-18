@@ -1,5 +1,9 @@
 package io.orqueio.example.flight.kafka;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.orqueio.example.flight.model.FlightPayload;
+import io.orqueio.example.flight.model.WorkerMessage;
+import io.orqueio.example.flight.model.WorkerResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FlightConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(FlightConsumer.class);
-    private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
+    private final KafkaTemplate<String, WorkerResponse> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     // Simulated seat availability per destination
     private final ConcurrentHashMap<String, Integer> availableSeats = new ConcurrentHashMap<>(Map.of(
@@ -23,30 +28,33 @@ public class FlightConsumer {
     ));
     private final ConcurrentHashMap<String, Integer> reservations = new ConcurrentHashMap<>();
 
-    public FlightConsumer(KafkaTemplate<String, Map<String, Object>> kafkaTemplate) {
+    public FlightConsumer(KafkaTemplate<String, WorkerResponse> kafkaTemplate, ObjectMapper objectMapper) {
         this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @KafkaListener(topics = "saga.flight.command", groupId = "flight-service")
-    public void onCommand(Map<String, Object> command) {
-        String action = (String) command.get("action");
-        String bookingId = (String) command.get("bookingId");
-        String processInstanceId = (String) command.get("processInstanceId");
-        String travelerName = (String) command.getOrDefault("travelerName", "Unknown");
-        String destination = (String) command.getOrDefault("destination", "Paris");
-        int passengers = ((Number) command.getOrDefault("passengers", 1)).intValue();
+    public void onCommand(WorkerMessage command) {
+        try {
+            FlightPayload payload = objectMapper.readValue(command.getPayload(), FlightPayload.class);
 
-        if ("EXECUTE".equals(action)) {
-            handleBooking(bookingId, processInstanceId, travelerName, destination, passengers);
-        } else if ("COMPENSATE".equals(action)) {
-            handleCancellation(bookingId, processInstanceId, destination);
+            if ("EXECUTE".equals(command.getAction())) {
+                handleBooking(command.getCorrelationId(), payload);
+            } else if ("COMPENSATE".equals(command.getAction())) {
+                handleCancellation(command.getCorrelationId(), payload.getBookingId(), payload.getDestination());
+            }
+        } catch (Exception e) {
+            log.error("[FLIGHT] Error processing command", e);
         }
     }
 
-    private void handleBooking(String bookingId, String processInstanceId,
-                               String travelerName, String destination, int passengers) {
+    private void handleBooking(String correlationId, FlightPayload payload) {
+        String bookingId = payload.getBookingId();
+        String destination = payload.getDestination();
+        int passengers = payload.getPassengers();
+
         log.info("[FLIGHT] Booking {} seat(s) to {} for '{}', booking {}",
-                passengers, destination, travelerName, bookingId);
+                passengers, destination, payload.getTravelerName(), bookingId);
 
         int seats = availableSeats.getOrDefault(destination, 0);
         boolean success = seats >= passengers;
@@ -65,10 +73,10 @@ public class FlightConsumer {
             log.warn("[FLIGHT] {} - {}", bookingId, message);
         }
 
-        sendResponse(bookingId, processInstanceId, success, message);
+        sendResponse(correlationId, bookingId, success, message);
     }
 
-    private void handleCancellation(String bookingId, String processInstanceId, String destination) {
+    private void handleCancellation(String correlationId, String bookingId, String destination) {
         log.info("[FLIGHT-COMPENSATE] Cancelling flight for booking {}", bookingId);
 
         Integer reserved = reservations.remove(bookingId);
@@ -77,14 +85,11 @@ public class FlightConsumer {
             log.info("[FLIGHT-COMPENSATE] Restored {} seat(s) to {}", reserved, destination);
         }
 
-        sendResponse(bookingId, processInstanceId, true, "Flight cancelled");
+        sendResponse(correlationId, bookingId, true, "Flight cancelled");
     }
 
-    private void sendResponse(String bookingId, String processInstanceId, boolean success, String message) {
-        Map<String, Object> response = Map.of(
-                "bookingId", bookingId, "processInstanceId", processInstanceId,
-                "success", success, "message", message, "serviceName", "flight-service"
-        );
+    private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
+        WorkerResponse response = new WorkerResponse(correlationId, success, message);
         kafkaTemplate.send("saga.flight.response", bookingId, response);
     }
 }

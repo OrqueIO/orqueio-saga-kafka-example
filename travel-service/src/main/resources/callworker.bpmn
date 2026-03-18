@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  id="Definitions_callworker"
+                  targetNamespace="http://bpmn.io/schema/bpmn">
+
+  <bpmn:message id="return-call-ok" name="return-call-ok-message"/>
+  <bpmn:message id="return-call-ko" name="return-call-ko-message"/>
+  <bpmn:error id="Error_CallKO" name="CALL_KO" errorCode="CALL_KO"/>
+
+  <bpmn:process id="callworker" name="Call Worker" isExecutable="true"
+                camunda:historyTimeToLive="P180D">
+
+    <!-- START -->
+    <bpmn:startEvent id="start_call_worker">
+      <bpmn:outgoing>Flow_ToProducer</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <!-- SEND KAFKA COMMAND -->
+    <bpmn:serviceTask id="message_producer" name="Message Producer"
+                      camunda:delegateExpression="${messageProducer}">
+      <bpmn:incoming>Flow_ToProducer</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEventGateway</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <!-- EVENT-BASED GATEWAY: wait for OK or KO -->
+    <bpmn:eventBasedGateway id="wait_for_response">
+      <bpmn:incoming>Flow_ToEventGateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToOK</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToKO</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+
+    <!-- RESPONSE OK -->
+    <bpmn:intermediateCatchEvent id="return_call_ok_event" name="Response OK">
+      <bpmn:incoming>Flow_ToOK</bpmn:incoming>
+      <bpmn:outgoing>Flow_OKToEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="return-call-ok"/>
+    </bpmn:intermediateCatchEvent>
+
+    <!-- RESPONSE KO -->
+    <bpmn:intermediateCatchEvent id="return_call_ko_event" name="Response KO">
+      <bpmn:incoming>Flow_ToKO</bpmn:incoming>
+      <bpmn:outgoing>Flow_KOToErrorEnd</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="return-call-ko"/>
+    </bpmn:intermediateCatchEvent>
+
+    <!-- END SUCCESS -->
+    <bpmn:endEvent id="end_call_ok">
+      <bpmn:incoming>Flow_OKToEnd</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- END ERROR (propagates to parent process) -->
+    <bpmn:endEvent id="end_call_ko">
+      <bpmn:incoming>Flow_KOToErrorEnd</bpmn:incoming>
+      <bpmn:errorEventDefinition errorRef="Error_CallKO"/>
+    </bpmn:endEvent>
+
+    <!-- SEQUENCE FLOWS -->
+    <bpmn:sequenceFlow id="Flow_ToProducer" sourceRef="start_call_worker" targetRef="message_producer"/>
+    <bpmn:sequenceFlow id="Flow_ToEventGateway" sourceRef="message_producer" targetRef="wait_for_response"/>
+    <bpmn:sequenceFlow id="Flow_ToOK" sourceRef="wait_for_response" targetRef="return_call_ok_event"/>
+    <bpmn:sequenceFlow id="Flow_ToKO" sourceRef="wait_for_response" targetRef="return_call_ko_event"/>
+    <bpmn:sequenceFlow id="Flow_OKToEnd" sourceRef="return_call_ok_event" targetRef="end_call_ok"/>
+    <bpmn:sequenceFlow id="Flow_KOToErrorEnd" sourceRef="return_call_ko_event" targetRef="end_call_ko"/>
+
+  </bpmn:process>
+
+  <!-- DIAGRAM -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_cw">
+    <bpmndi:BPMNPlane id="BPMNPlane_cw" bpmnElement="callworker">
+
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start_call_worker">
+        <dc:Bounds x="60" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="producer_di" bpmnElement="message_producer">
+        <dc:Bounds x="150" y="180" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gateway_di" bpmnElement="wait_for_response">
+        <dc:Bounds x="310" y="195" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ok_event_di" bpmnElement="return_call_ok_event">
+        <dc:Bounds x="420" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ko_event_di" bpmnElement="return_call_ko_event">
+        <dc:Bounds x="420" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_ok_di" bpmnElement="end_call_ok">
+        <dc:Bounds x="520" y="202" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_ko_di" bpmnElement="end_call_ko">
+        <dc:Bounds x="520" y="102" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="flow1_di" bpmnElement="Flow_ToProducer">
+        <di:waypoint x="96" y="220"/><di:waypoint x="150" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow2_di" bpmnElement="Flow_ToEventGateway">
+        <di:waypoint x="250" y="220"/><di:waypoint x="310" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow3_di" bpmnElement="Flow_ToOK">
+        <di:waypoint x="360" y="220"/><di:waypoint x="420" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow4_di" bpmnElement="Flow_ToKO">
+        <di:waypoint x="335" y="195"/><di:waypoint x="335" y="120"/><di:waypoint x="420" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow5_di" bpmnElement="Flow_OKToEnd">
+        <di:waypoint x="456" y="220"/><di:waypoint x="520" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="flow6_di" bpmnElement="Flow_KOToErrorEnd">
+        <di:waypoint x="456" y="120"/><di:waypoint x="520" y="120"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,5 +1,8 @@
 package io.orqueio.example.hotel.kafka;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.orqueio.example.hotel.model.WorkerMessage;
+import io.orqueio.example.hotel.model.WorkerResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,131 +18,125 @@ import static org.mockito.Mockito.*;
 class HotelConsumerTest {
 
     private HotelConsumer hotelConsumer;
-    private KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
+    private KafkaTemplate<String, WorkerResponse> kafkaTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @SuppressWarnings("unchecked")
     @BeforeEach
     void setUp() {
         kafkaTemplate = mock(KafkaTemplate.class);
-        hotelConsumer = new HotelConsumer(kafkaTemplate);
+        hotelConsumer = new HotelConsumer(kafkaTemplate, objectMapper);
     }
 
     @Test
     @DisplayName("EXECUTE: should book hotel when budget is sufficient")
-    void shouldBookHotel_whenBudgetSufficient() {
+    void shouldBookHotel_whenBudgetSufficient() throws Exception {
         // Given - Paris rate is 180 EUR/night, budget is 2000
-        Map<String, Object> command = Map.of(
-                "action", "EXECUTE",
-                "bookingId", "TRV-001",
-                "processInstanceId", "proc-001",
-                "travelerName", "Alice",
-                "destination", "Paris",
-                "budget", 2000.0
-        );
+        WorkerMessage command = new WorkerMessage("proc-001", "EXECUTE",
+                objectMapper.writeValueAsString(Map.of(
+                        "bookingId", "TRV-001",
+                        "travelerName", "Alice",
+                        "destination", "Paris",
+                        "budget", 2000.0
+                )));
 
         // When
         hotelConsumer.onCommand(command);
 
         // Then
-        ArgumentCaptor<Map<String, Object>> responseCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<WorkerResponse> responseCaptor = ArgumentCaptor.forClass(WorkerResponse.class);
         verify(kafkaTemplate).send(eq("saga.hotel.response"), eq("TRV-001"), responseCaptor.capture());
 
-        Map<String, Object> response = responseCaptor.getValue();
-        assertTrue((Boolean) response.get("success"));
-        assertTrue(((String) response.get("message")).contains("Hotel booked in Paris"));
-        assertEquals("hotel-service", response.get("serviceName"));
+        WorkerResponse response = responseCaptor.getValue();
+        assertTrue(response.isSuccess());
+        assertTrue(response.getPayload().contains("Hotel booked in Paris"));
     }
 
     @Test
     @DisplayName("EXECUTE: should reject hotel when budget too low")
-    void shouldRejectHotel_whenBudgetTooLow() {
+    void shouldRejectHotel_whenBudgetTooLow() throws Exception {
         // Given - Dubai rate is 450 EUR/night, budget is 100
-        Map<String, Object> command = Map.of(
-                "action", "EXECUTE",
-                "bookingId", "TRV-002",
-                "processInstanceId", "proc-002",
-                "travelerName", "Charlie",
-                "destination", "Dubai",
-                "budget", 100.0
-        );
+        WorkerMessage command = new WorkerMessage("proc-002", "EXECUTE",
+                objectMapper.writeValueAsString(Map.of(
+                        "bookingId", "TRV-002",
+                        "travelerName", "Charlie",
+                        "destination", "Dubai",
+                        "budget", 100.0
+                )));
 
         // When
         hotelConsumer.onCommand(command);
 
         // Then
-        ArgumentCaptor<Map<String, Object>> responseCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<WorkerResponse> responseCaptor = ArgumentCaptor.forClass(WorkerResponse.class);
         verify(kafkaTemplate).send(eq("saga.hotel.response"), eq("TRV-002"), responseCaptor.capture());
 
-        Map<String, Object> response = responseCaptor.getValue();
-        assertFalse((Boolean) response.get("success"));
-        assertTrue(((String) response.get("message")).contains("insufficient"));
+        WorkerResponse response = responseCaptor.getValue();
+        assertFalse(response.isSuccess());
+        assertTrue(response.getPayload().contains("insufficient"));
     }
 
     @Test
     @DisplayName("EXECUTE: should reject when no rooms available")
-    void shouldRejectHotel_whenNoRoomsAvailable() {
+    void shouldRejectHotel_whenNoRoomsAvailable() throws Exception {
         // Given - Dubai has 10 rooms, book all of them
         for (int i = 0; i < 10; i++) {
-            Map<String, Object> command = Map.of(
-                    "action", "EXECUTE",
-                    "bookingId", "TRV-FILL-" + i,
-                    "processInstanceId", "proc-fill-" + i,
-                    "travelerName", "Guest " + i,
-                    "destination", "Dubai",
-                    "budget", 5000.0
-            );
+            WorkerMessage command = new WorkerMessage("proc-fill-" + i, "EXECUTE",
+                    objectMapper.writeValueAsString(Map.of(
+                            "bookingId", "TRV-FILL-" + i,
+                            "travelerName", "Guest " + i,
+                            "destination", "Dubai",
+                            "budget", 5000.0
+                    )));
             hotelConsumer.onCommand(command);
         }
 
         // When - try one more
-        Map<String, Object> lastCommand = Map.of(
-                "action", "EXECUTE",
-                "bookingId", "TRV-FULL",
-                "processInstanceId", "proc-full",
-                "travelerName", "TooLate",
-                "destination", "Dubai",
-                "budget", 5000.0
-        );
+        WorkerMessage lastCommand = new WorkerMessage("proc-full", "EXECUTE",
+                objectMapper.writeValueAsString(Map.of(
+                        "bookingId", "TRV-FULL",
+                        "travelerName", "TooLate",
+                        "destination", "Dubai",
+                        "budget", 5000.0
+                )));
         hotelConsumer.onCommand(lastCommand);
 
         // Then
-        ArgumentCaptor<Map<String, Object>> responseCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<WorkerResponse> responseCaptor = ArgumentCaptor.forClass(WorkerResponse.class);
         verify(kafkaTemplate, atLeastOnce()).send(eq("saga.hotel.response"), eq("TRV-FULL"), responseCaptor.capture());
 
-        Map<String, Object> lastResponse = responseCaptor.getValue();
-        assertFalse((Boolean) lastResponse.get("success"));
-        assertTrue(((String) lastResponse.get("message")).contains("No rooms"));
+        WorkerResponse lastResponse = responseCaptor.getValue();
+        assertFalse(lastResponse.isSuccess());
+        assertTrue(lastResponse.getPayload().contains("No rooms"));
     }
 
     @Test
     @DisplayName("COMPENSATE: should cancel hotel and restore room")
-    void shouldCancelHotel_andRestoreRoom() {
+    void shouldCancelHotel_andRestoreRoom() throws Exception {
         // Given - book a hotel first
-        Map<String, Object> bookCommand = Map.of(
-                "action", "EXECUTE",
-                "bookingId", "TRV-003",
-                "processInstanceId", "proc-003",
-                "travelerName", "Eve",
-                "destination", "London",
-                "budget", 3000.0
-        );
+        WorkerMessage bookCommand = new WorkerMessage("proc-003", "EXECUTE",
+                objectMapper.writeValueAsString(Map.of(
+                        "bookingId", "TRV-003",
+                        "travelerName", "Eve",
+                        "destination", "London",
+                        "budget", 3000.0
+                )));
         hotelConsumer.onCommand(bookCommand);
 
         // When - compensate
-        Map<String, Object> cancelCommand = Map.of(
-                "action", "COMPENSATE",
-                "bookingId", "TRV-003",
-                "processInstanceId", "proc-003",
-                "destination", "London"
-        );
+        WorkerMessage cancelCommand = new WorkerMessage("proc-003", "COMPENSATE",
+                objectMapper.writeValueAsString(Map.of(
+                        "bookingId", "TRV-003",
+                        "destination", "London"
+                )));
         hotelConsumer.onCommand(cancelCommand);
 
         // Then
-        ArgumentCaptor<Map<String, Object>> responseCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<WorkerResponse> responseCaptor = ArgumentCaptor.forClass(WorkerResponse.class);
         verify(kafkaTemplate, times(2)).send(eq("saga.hotel.response"), eq("TRV-003"), responseCaptor.capture());
 
-        Map<String, Object> cancelResponse = responseCaptor.getAllValues().get(1);
-        assertTrue((Boolean) cancelResponse.get("success"));
-        assertTrue(((String) cancelResponse.get("message")).contains("cancelled"));
+        WorkerResponse cancelResponse = responseCaptor.getAllValues().get(1);
+        assertTrue(cancelResponse.isSuccess());
+        assertTrue(cancelResponse.getPayload().contains("cancelled"));
     }
 }

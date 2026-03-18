@@ -1,7 +1,7 @@
 package io.orqueio.example.travel.config;
 
-import io.orqueio.example.travel.model.SagaCommand;
-import io.orqueio.example.travel.model.SagaResponse;
+import io.orqueio.example.travel.model.WorkerMessage;
+import io.orqueio.example.travel.model.WorkerResponse;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -24,7 +24,7 @@ public class KafkaConfig {
     private String bootstrapServers;
 
     @Bean
-    public ProducerFactory<String, SagaCommand> producerFactory() {
+    public ProducerFactory<String, WorkerMessage> producerFactory() {
         Map<String, Object> config = new HashMap<>();
         config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
@@ -33,25 +33,25 @@ public class KafkaConfig {
     }
 
     @Bean
-    public KafkaTemplate<String, SagaCommand> kafkaTemplate() {
+    public KafkaTemplate<String, WorkerMessage> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
     }
 
     @Bean
-    public ConsumerFactory<String, SagaResponse> consumerFactory() {
+    public ConsumerFactory<String, WorkerResponse> consumerFactory() {
         Map<String, Object> config = new HashMap<>();
         config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         config.put(ConsumerConfig.GROUP_ID_CONFIG, "saga-orchestrator");
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
         config.put(JsonDeserializer.TRUSTED_PACKAGES, "io.orqueio.example.*");
-        config.put(JsonDeserializer.VALUE_DEFAULT_TYPE, SagaResponse.class.getName());
+        config.put(JsonDeserializer.VALUE_DEFAULT_TYPE, WorkerResponse.class.getName());
         return new DefaultKafkaConsumerFactory<>(config);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, SagaResponse> kafkaListenerContainerFactory() {
-        ConcurrentKafkaListenerContainerFactory<String, SagaResponse> factory =
+    public ConcurrentKafkaListenerContainerFactory<String, WorkerResponse> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, WorkerResponse> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         return factory;

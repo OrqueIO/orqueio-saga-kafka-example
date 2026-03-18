@@ -1,5 +1,9 @@
 package io.orqueio.example.hotel.kafka;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.orqueio.example.hotel.model.HotelPayload;
+import io.orqueio.example.hotel.model.WorkerMessage;
+import io.orqueio.example.hotel.model.WorkerResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class HotelConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(HotelConsumer.class);
-    private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
+    private final KafkaTemplate<String, WorkerResponse> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     // Simulated room rates per destination (per night in EUR)
     private final ConcurrentHashMap<String, Double> roomRates = new ConcurrentHashMap<>(Map.of(
@@ -27,30 +32,33 @@ public class HotelConsumer {
     ));
     private final ConcurrentHashMap<String, String> reservations = new ConcurrentHashMap<>();
 
-    public HotelConsumer(KafkaTemplate<String, Map<String, Object>> kafkaTemplate) {
+    public HotelConsumer(KafkaTemplate<String, WorkerResponse> kafkaTemplate, ObjectMapper objectMapper) {
         this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @KafkaListener(topics = "saga.hotel.command", groupId = "hotel-service")
-    public void onCommand(Map<String, Object> command) {
-        String action = (String) command.get("action");
-        String bookingId = (String) command.get("bookingId");
-        String processInstanceId = (String) command.get("processInstanceId");
-        String travelerName = (String) command.getOrDefault("travelerName", "Unknown");
-        String destination = (String) command.getOrDefault("destination", "Paris");
-        double budget = ((Number) command.getOrDefault("budget", 2000.0)).doubleValue();
+    public void onCommand(WorkerMessage command) {
+        try {
+            HotelPayload payload = objectMapper.readValue(command.getPayload(), HotelPayload.class);
 
-        if ("EXECUTE".equals(action)) {
-            handleBooking(bookingId, processInstanceId, travelerName, destination, budget);
-        } else if ("COMPENSATE".equals(action)) {
-            handleCancellation(bookingId, processInstanceId, destination);
+            if ("EXECUTE".equals(command.getAction())) {
+                handleBooking(command.getCorrelationId(), payload);
+            } else if ("COMPENSATE".equals(command.getAction())) {
+                handleCancellation(command.getCorrelationId(), payload.getBookingId(), payload.getDestination());
+            }
+        } catch (Exception e) {
+            log.error("[HOTEL] Error processing command", e);
         }
     }
 
-    private void handleBooking(String bookingId, String processInstanceId,
-                               String travelerName, String destination, double budget) {
+    private void handleBooking(String correlationId, HotelPayload payload) {
+        String bookingId = payload.getBookingId();
+        String destination = payload.getDestination();
+        double budget = payload.getBudget();
+
         log.info("[HOTEL] Booking hotel in {} for '{}', budget: {} EUR, booking {}",
-                destination, travelerName, budget, bookingId);
+                destination, payload.getTravelerName(), budget, bookingId);
 
         double rate = roomRates.getOrDefault(destination, 150.0);
         int rooms = availableRooms.getOrDefault(destination, 0);
@@ -76,10 +84,10 @@ public class HotelConsumer {
             log.info("[HOTEL] {} - {}", bookingId, message);
         }
 
-        sendResponse(bookingId, processInstanceId, success, message);
+        sendResponse(correlationId, bookingId, success, message);
     }
 
-    private void handleCancellation(String bookingId, String processInstanceId, String destination) {
+    private void handleCancellation(String correlationId, String bookingId, String destination) {
         log.info("[HOTEL-COMPENSATE] Cancelling hotel for booking {}", bookingId);
 
         String reserved = reservations.remove(bookingId);
@@ -88,14 +96,11 @@ public class HotelConsumer {
             log.info("[HOTEL-COMPENSATE] Restored 1 room in {}", reserved);
         }
 
-        sendResponse(bookingId, processInstanceId, true, "Hotel reservation cancelled");
+        sendResponse(correlationId, bookingId, true, "Hotel reservation cancelled");
     }
 
-    private void sendResponse(String bookingId, String processInstanceId, boolean success, String message) {
-        Map<String, Object> response = Map.of(
-                "bookingId", bookingId, "processInstanceId", processInstanceId,
-                "success", success, "message", message, "serviceName", "hotel-service"
-        );
+    private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
+        WorkerResponse response = new WorkerResponse(correlationId, success, message);
         kafkaTemplate.send("saga.hotel.response", bookingId, response);
     }
 }

@@ -8,147 +8,137 @@
                   id="Definitions_1"
                   targetNamespace="http://bpmn.io/schema/bpmn">
 
-  <bpmn:message id="Message_FlightResponse" name="FlightResponse"/>
-  <bpmn:message id="Message_HotelResponse" name="HotelResponse"/>
-  <bpmn:message id="Message_CarRentalResponse" name="CarRentalResponse"/>
+  <bpmn:error id="Error_CallKO" name="CALL_KO" errorCode="CALL_KO"/>
 
   <bpmn:process id="travel-saga" name="Travel Booking Saga - Async Orchestration" isExecutable="true"
                 camunda:historyTimeToLive="P180D">
 
     <!-- ==================== START ==================== -->
     <bpmn:startEvent id="StartEvent" name="Booking Received">
-      <bpmn:outgoing>Flow_ToBookFlight</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToCallFlight</bpmn:outgoing>
     </bpmn:startEvent>
 
-    <!-- ==================== STEP 1: BOOK FLIGHT ==================== -->
-    <bpmn:serviceTask id="Task_BookFlight" name="Book Flight"
-                      camunda:delegateExpression="${bookFlight}">
-      <bpmn:incoming>Flow_ToBookFlight</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToWaitFlight</bpmn:outgoing>
-    </bpmn:serviceTask>
+    <!-- ==================== STEP 1: BOOK FLIGHT (Call Worker) ==================== -->
+    <bpmn:callActivity id="CallFlight" name="Call Flight Worker"
+                       calledElement="callworker">
+      <bpmn:extensionElements>
+        <camunda:in variables="all"/>
+        <camunda:in sourceExpression="${'saga.flight.command'}" target="commandTopic"/>
+        <camunda:in sourceExpression="${'EXECUTE'}" target="workerAction"/>
+        <camunda:out variables="all"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCallFlight</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCallHotel</bpmn:outgoing>
+    </bpmn:callActivity>
 
-    <bpmn:intermediateCatchEvent id="Catch_FlightResponse" name="Wait for Flight Response">
-      <bpmn:incoming>Flow_ToWaitFlight</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToFlightGateway</bpmn:outgoing>
-      <bpmn:messageEventDefinition messageRef="Message_FlightResponse"/>
-    </bpmn:intermediateCatchEvent>
-
-    <bpmn:exclusiveGateway id="Gateway_FlightResult" name="Flight Booked?">
-      <bpmn:incoming>Flow_ToFlightGateway</bpmn:incoming>
-      <bpmn:outgoing>Flow_FlightSuccess</bpmn:outgoing>
+    <bpmn:boundaryEvent id="BoundaryError_Flight" attachedToRef="CallFlight">
       <bpmn:outgoing>Flow_FlightFailed</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
+      <bpmn:errorEventDefinition errorRef="Error_CallKO"/>
+    </bpmn:boundaryEvent>
 
-    <!-- ==================== STEP 2: BOOK HOTEL ==================== -->
-    <bpmn:serviceTask id="Task_BookHotel" name="Book Hotel"
-                      camunda:delegateExpression="${bookHotel}">
-      <bpmn:incoming>Flow_FlightSuccess</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToWaitHotel</bpmn:outgoing>
-    </bpmn:serviceTask>
+    <!-- ==================== STEP 2: BOOK HOTEL (Call Worker) ==================== -->
+    <bpmn:callActivity id="CallHotel" name="Call Hotel Worker"
+                       calledElement="callworker">
+      <bpmn:extensionElements>
+        <camunda:in variables="all"/>
+        <camunda:in sourceExpression="${'saga.hotel.command'}" target="commandTopic"/>
+        <camunda:in sourceExpression="${'EXECUTE'}" target="workerAction"/>
+        <camunda:out variables="all"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCallHotel</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCallCar</bpmn:outgoing>
+    </bpmn:callActivity>
 
-    <bpmn:intermediateCatchEvent id="Catch_HotelResponse" name="Wait for Hotel Response">
-      <bpmn:incoming>Flow_ToWaitHotel</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToHotelGateway</bpmn:outgoing>
-      <bpmn:messageEventDefinition messageRef="Message_HotelResponse"/>
-    </bpmn:intermediateCatchEvent>
-
-    <bpmn:exclusiveGateway id="Gateway_HotelResult" name="Hotel Booked?">
-      <bpmn:incoming>Flow_ToHotelGateway</bpmn:incoming>
-      <bpmn:outgoing>Flow_HotelSuccess</bpmn:outgoing>
+    <bpmn:boundaryEvent id="BoundaryError_Hotel" attachedToRef="CallHotel">
       <bpmn:outgoing>Flow_HotelFailed</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
+      <bpmn:errorEventDefinition errorRef="Error_CallKO"/>
+    </bpmn:boundaryEvent>
 
-    <!-- ==================== STEP 3: RENT CAR ==================== -->
-    <bpmn:serviceTask id="Task_RentCar" name="Rent Car"
-                      camunda:delegateExpression="${rentCar}">
-      <bpmn:incoming>Flow_HotelSuccess</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToWaitCar</bpmn:outgoing>
-    </bpmn:serviceTask>
+    <!-- ==================== STEP 3: RENT CAR (Call Worker) ==================== -->
+    <bpmn:callActivity id="CallCar" name="Call Car Worker"
+                       calledElement="callworker">
+      <bpmn:extensionElements>
+        <camunda:in variables="all"/>
+        <camunda:in sourceExpression="${'saga.car.command'}" target="commandTopic"/>
+        <camunda:in sourceExpression="${'EXECUTE'}" target="workerAction"/>
+        <camunda:out variables="all"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCallCar</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndSuccess</bpmn:outgoing>
+    </bpmn:callActivity>
 
-    <bpmn:intermediateCatchEvent id="Catch_CarResponse" name="Wait for Car Rental Response">
-      <bpmn:incoming>Flow_ToWaitCar</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToCarGateway</bpmn:outgoing>
-      <bpmn:messageEventDefinition messageRef="Message_CarRentalResponse"/>
-    </bpmn:intermediateCatchEvent>
-
-    <bpmn:exclusiveGateway id="Gateway_CarResult" name="Car Rented?">
-      <bpmn:incoming>Flow_ToCarGateway</bpmn:incoming>
-      <bpmn:outgoing>Flow_CarSuccess</bpmn:outgoing>
+    <bpmn:boundaryEvent id="BoundaryError_Car" attachedToRef="CallCar">
       <bpmn:outgoing>Flow_CarFailed</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
+      <bpmn:errorEventDefinition errorRef="Error_CallKO"/>
+    </bpmn:boundaryEvent>
 
-    <!-- ==================== COMPENSATION: CANCEL HOTEL ==================== -->
-    <bpmn:serviceTask id="Task_CancelHotel" name="Cancel Hotel (Compensate)"
-                      camunda:delegateExpression="${cancelHotel}">
-      <bpmn:incoming>Flow_CarFailed</bpmn:incoming>
-      <bpmn:outgoing>Flow_CancelHotelToCancelFlight</bpmn:outgoing>
-    </bpmn:serviceTask>
-
-    <!-- ==================== COMPENSATION: CANCEL FLIGHT ==================== -->
-    <bpmn:serviceTask id="Task_CancelFlight_FromHotel" name="Cancel Flight (Compensate)"
-                      camunda:delegateExpression="${cancelFlight}">
-      <bpmn:incoming>Flow_HotelFailed</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToEndHotelFailed</bpmn:outgoing>
-    </bpmn:serviceTask>
-
-    <bpmn:serviceTask id="Task_CancelFlight_FromCar" name="Cancel Flight (Compensate)"
-                      camunda:delegateExpression="${cancelFlight}">
-      <bpmn:incoming>Flow_CancelHotelToCancelFlight</bpmn:incoming>
-      <bpmn:outgoing>Flow_ToEndCarFailed</bpmn:outgoing>
-    </bpmn:serviceTask>
-
-    <!-- ==================== END EVENTS ==================== -->
+    <!-- ==================== END SUCCESS ==================== -->
     <bpmn:endEvent id="End_Success" name="Trip Booked Successfully">
-      <bpmn:incoming>Flow_CarSuccess</bpmn:incoming>
+      <bpmn:incoming>Flow_ToEndSuccess</bpmn:incoming>
     </bpmn:endEvent>
 
+    <!-- ==================== COMPENSATION: FLIGHT FAILED ==================== -->
     <bpmn:endEvent id="End_FlightFailed" name="Flight Unavailable">
       <bpmn:incoming>Flow_FlightFailed</bpmn:incoming>
     </bpmn:endEvent>
 
+    <!-- ==================== COMPENSATION: HOTEL FAILED → Cancel Flight ==================== -->
+    <bpmn:serviceTask id="CancelFlight_FromHotel" name="Cancel Flight"
+                      camunda:delegateExpression="${messageProducer}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="commandTopic">saga.flight.command</camunda:inputParameter>
+          <camunda:inputParameter name="workerAction">COMPENSATE</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_HotelFailed</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndHotelFailed</bpmn:outgoing>
+    </bpmn:serviceTask>
+
     <bpmn:endEvent id="End_HotelFailed" name="Hotel Unavailable - Flight Cancelled">
       <bpmn:incoming>Flow_ToEndHotelFailed</bpmn:incoming>
     </bpmn:endEvent>
+
+    <!-- ==================== COMPENSATION: CAR FAILED → Cancel Hotel → Cancel Flight ==================== -->
+    <bpmn:serviceTask id="CancelHotel" name="Cancel Hotel"
+                      camunda:delegateExpression="${messageProducer}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="commandTopic">saga.hotel.command</camunda:inputParameter>
+          <camunda:inputParameter name="workerAction">COMPENSATE</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_CarFailed</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToCancelFlight_FromCar</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="CancelFlight_FromCar" name="Cancel Flight"
+                      camunda:delegateExpression="${messageProducer}">
+      <bpmn:extensionElements>
+        <camunda:inputOutput>
+          <camunda:inputParameter name="commandTopic">saga.flight.command</camunda:inputParameter>
+          <camunda:inputParameter name="workerAction">COMPENSATE</camunda:inputParameter>
+        </camunda:inputOutput>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ToCancelFlight_FromCar</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToEndCarFailed</bpmn:outgoing>
+    </bpmn:serviceTask>
 
     <bpmn:endEvent id="End_CarFailed" name="Car Unavailable - Hotel &amp; Flight Cancelled">
       <bpmn:incoming>Flow_ToEndCarFailed</bpmn:incoming>
     </bpmn:endEvent>
 
     <!-- ==================== SEQUENCE FLOWS ==================== -->
-    <bpmn:sequenceFlow id="Flow_ToBookFlight" sourceRef="StartEvent" targetRef="Task_BookFlight"/>
-    <bpmn:sequenceFlow id="Flow_ToWaitFlight" sourceRef="Task_BookFlight" targetRef="Catch_FlightResponse"/>
-    <bpmn:sequenceFlow id="Flow_ToFlightGateway" sourceRef="Catch_FlightResponse" targetRef="Gateway_FlightResult"/>
-
-    <bpmn:sequenceFlow id="Flow_FlightSuccess" name="Yes" sourceRef="Gateway_FlightResult" targetRef="Task_BookHotel">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == true}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_FlightFailed" name="No" sourceRef="Gateway_FlightResult" targetRef="End_FlightFailed">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == false}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-
-    <bpmn:sequenceFlow id="Flow_ToWaitHotel" sourceRef="Task_BookHotel" targetRef="Catch_HotelResponse"/>
-    <bpmn:sequenceFlow id="Flow_ToHotelGateway" sourceRef="Catch_HotelResponse" targetRef="Gateway_HotelResult"/>
-
-    <bpmn:sequenceFlow id="Flow_HotelSuccess" name="Yes" sourceRef="Gateway_HotelResult" targetRef="Task_RentCar">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == true}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_HotelFailed" name="No" sourceRef="Gateway_HotelResult" targetRef="Task_CancelFlight_FromHotel">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == false}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-
-    <bpmn:sequenceFlow id="Flow_ToWaitCar" sourceRef="Task_RentCar" targetRef="Catch_CarResponse"/>
-    <bpmn:sequenceFlow id="Flow_ToCarGateway" sourceRef="Catch_CarResponse" targetRef="Gateway_CarResult"/>
-
-    <bpmn:sequenceFlow id="Flow_CarSuccess" name="Yes" sourceRef="Gateway_CarResult" targetRef="End_Success">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == true}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_CarFailed" name="No" sourceRef="Gateway_CarResult" targetRef="Task_CancelHotel">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${serviceSuccess == false}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>
-
-    <bpmn:sequenceFlow id="Flow_CancelHotelToCancelFlight" sourceRef="Task_CancelHotel" targetRef="Task_CancelFlight_FromCar"/>
-    <bpmn:sequenceFlow id="Flow_ToEndHotelFailed" sourceRef="Task_CancelFlight_FromHotel" targetRef="End_HotelFailed"/>
-    <bpmn:sequenceFlow id="Flow_ToEndCarFailed" sourceRef="Task_CancelFlight_FromCar" targetRef="End_CarFailed"/>
+    <bpmn:sequenceFlow id="Flow_ToCallFlight" sourceRef="StartEvent" targetRef="CallFlight"/>
+    <bpmn:sequenceFlow id="Flow_FlightFailed" sourceRef="BoundaryError_Flight" targetRef="End_FlightFailed"/>
+    <bpmn:sequenceFlow id="Flow_ToCallHotel" sourceRef="CallFlight" targetRef="CallHotel"/>
+    <bpmn:sequenceFlow id="Flow_HotelFailed" sourceRef="BoundaryError_Hotel" targetRef="CancelFlight_FromHotel"/>
+    <bpmn:sequenceFlow id="Flow_ToEndHotelFailed" sourceRef="CancelFlight_FromHotel" targetRef="End_HotelFailed"/>
+    <bpmn:sequenceFlow id="Flow_ToCallCar" sourceRef="CallHotel" targetRef="CallCar"/>
+    <bpmn:sequenceFlow id="Flow_CarFailed" sourceRef="BoundaryError_Car" targetRef="CancelHotel"/>
+    <bpmn:sequenceFlow id="Flow_ToCancelFlight_FromCar" sourceRef="CancelHotel" targetRef="CancelFlight_FromCar"/>
+    <bpmn:sequenceFlow id="Flow_ToEndCarFailed" sourceRef="CancelFlight_FromCar" targetRef="End_CarFailed"/>
+    <bpmn:sequenceFlow id="Flow_ToEndSuccess" sourceRef="CallCar" targetRef="End_Success"/>
 
   </bpmn:process>
 
@@ -156,139 +146,92 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="travel-saga">
 
+      <!-- Start -->
       <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent">
-        <dc:Bounds x="160" y="260" width="36" height="36"/>
+        <dc:Bounds x="60" y="260" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- Flight -->
-      <bpmndi:BPMNShape id="Task_BookFlight_di" bpmnElement="Task_BookFlight">
-        <dc:Bounds x="250" y="238" width="100" height="80"/>
+      <!-- Flight Call Activity -->
+      <bpmndi:BPMNShape id="CallFlight_di" bpmnElement="CallFlight">
+        <dc:Bounds x="160" y="238" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Catch_FlightResponse_di" bpmnElement="Catch_FlightResponse">
-        <dc:Bounds x="400" y="260" width="36" height="36"/>
+      <bpmndi:BPMNShape id="BoundaryError_Flight_di" bpmnElement="BoundaryError_Flight">
+        <dc:Bounds x="192" y="300" width="36" height="36"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_FlightResult_di" bpmnElement="Gateway_FlightResult" isMarkerVisible="true">
-        <dc:Bounds x="485" y="253" width="50" height="50"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Hotel -->
-      <bpmndi:BPMNShape id="Task_BookHotel_di" bpmnElement="Task_BookHotel">
-        <dc:Bounds x="590" y="238" width="100" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Catch_HotelResponse_di" bpmnElement="Catch_HotelResponse">
-        <dc:Bounds x="740" y="260" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_HotelResult_di" bpmnElement="Gateway_HotelResult" isMarkerVisible="true">
-        <dc:Bounds x="825" y="253" width="50" height="50"/>
+      <bpmndi:BPMNShape id="End_FlightFailed_di" bpmnElement="End_FlightFailed">
+        <dc:Bounds x="192" y="400" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- Car -->
-      <bpmndi:BPMNShape id="Task_RentCar_di" bpmnElement="Task_RentCar">
-        <dc:Bounds x="930" y="238" width="100" height="80"/>
+      <!-- Hotel Call Activity -->
+      <bpmndi:BPMNShape id="CallHotel_di" bpmnElement="CallHotel">
+        <dc:Bounds x="330" y="238" width="100" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Catch_CarResponse_di" bpmnElement="Catch_CarResponse">
-        <dc:Bounds x="1080" y="260" width="36" height="36"/>
+      <bpmndi:BPMNShape id="BoundaryError_Hotel_di" bpmnElement="BoundaryError_Hotel">
+        <dc:Bounds x="362" y="300" width="36" height="36"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_CarResult_di" bpmnElement="Gateway_CarResult" isMarkerVisible="true">
-        <dc:Bounds x="1165" y="253" width="50" height="50"/>
+
+      <!-- Hotel compensation -->
+      <bpmndi:BPMNShape id="CancelFlight_FromHotel_di" bpmnElement="CancelFlight_FromHotel">
+        <dc:Bounds x="330" y="400" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_HotelFailed_di" bpmnElement="End_HotelFailed">
+        <dc:Bounds x="490" y="422" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Car Call Activity -->
+      <bpmndi:BPMNShape id="CallCar_di" bpmnElement="CallCar">
+        <dc:Bounds x="500" y="238" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BoundaryError_Car_di" bpmnElement="BoundaryError_Car">
+        <dc:Bounds x="532" y="300" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+
+      <!-- Car compensation -->
+      <bpmndi:BPMNShape id="CancelHotel_di" bpmnElement="CancelHotel">
+        <dc:Bounds x="500" y="400" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="CancelFlight_FromCar_di" bpmnElement="CancelFlight_FromCar">
+        <dc:Bounds x="500" y="520" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_CarFailed_di" bpmnElement="End_CarFailed">
+        <dc:Bounds x="660" y="542" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
       <!-- End Success -->
       <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
-        <dc:Bounds x="1280" y="260" width="36" height="36"/>
+        <dc:Bounds x="660" y="260" width="36" height="36"/>
       </bpmndi:BPMNShape>
 
-      <!-- End Flight Failed -->
-      <bpmndi:BPMNShape id="End_FlightFailed_di" bpmnElement="End_FlightFailed">
-        <dc:Bounds x="492" y="400" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Compensation: Cancel Flight from Hotel fail -->
-      <bpmndi:BPMNShape id="Task_CancelFlight_FromHotel_di" bpmnElement="Task_CancelFlight_FromHotel">
-        <dc:Bounds x="800" y="380" width="100" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_HotelFailed_di" bpmnElement="End_HotelFailed">
-        <dc:Bounds x="950" y="402" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Compensation: Cancel Hotel then Cancel Flight from Car fail -->
-      <bpmndi:BPMNShape id="Task_CancelHotel_di" bpmnElement="Task_CancelHotel">
-        <dc:Bounds x="1140" y="380" width="100" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_CancelFlight_FromCar_di" bpmnElement="Task_CancelFlight_FromCar">
-        <dc:Bounds x="1140" y="500" width="100" height="80"/>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_CarFailed_di" bpmnElement="End_CarFailed">
-        <dc:Bounds x="1290" y="522" width="36" height="36"/>
-      </bpmndi:BPMNShape>
-
-      <!-- Sequence Flow edges -->
-      <bpmndi:BPMNEdge id="Flow_ToBookFlight_di" bpmnElement="Flow_ToBookFlight">
-        <di:waypoint x="196" y="278"/>
-        <di:waypoint x="250" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToWaitFlight_di" bpmnElement="Flow_ToWaitFlight">
-        <di:waypoint x="350" y="278"/>
-        <di:waypoint x="400" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToFlightGateway_di" bpmnElement="Flow_ToFlightGateway">
-        <di:waypoint x="436" y="278"/>
-        <di:waypoint x="485" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_FlightSuccess_di" bpmnElement="Flow_FlightSuccess">
-        <di:waypoint x="535" y="278"/>
-        <di:waypoint x="590" y="278"/>
+      <!-- Edges -->
+      <bpmndi:BPMNEdge id="Flow_ToCallFlight_di" bpmnElement="Flow_ToCallFlight">
+        <di:waypoint x="96" y="278"/><di:waypoint x="160" y="278"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_FlightFailed_di" bpmnElement="Flow_FlightFailed">
-        <di:waypoint x="510" y="303"/>
-        <di:waypoint x="510" y="400"/>
+        <di:waypoint x="210" y="336"/><di:waypoint x="210" y="400"/>
       </bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Flow_ToWaitHotel_di" bpmnElement="Flow_ToWaitHotel">
-        <di:waypoint x="690" y="278"/>
-        <di:waypoint x="740" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToHotelGateway_di" bpmnElement="Flow_ToHotelGateway">
-        <di:waypoint x="776" y="278"/>
-        <di:waypoint x="825" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_HotelSuccess_di" bpmnElement="Flow_HotelSuccess">
-        <di:waypoint x="875" y="278"/>
-        <di:waypoint x="930" y="278"/>
+      <bpmndi:BPMNEdge id="Flow_ToCallHotel_di" bpmnElement="Flow_ToCallHotel">
+        <di:waypoint x="260" y="278"/><di:waypoint x="330" y="278"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_HotelFailed_di" bpmnElement="Flow_HotelFailed">
-        <di:waypoint x="850" y="303"/>
-        <di:waypoint x="850" y="380"/>
-      </bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Flow_ToWaitCar_di" bpmnElement="Flow_ToWaitCar">
-        <di:waypoint x="1030" y="278"/>
-        <di:waypoint x="1080" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_ToCarGateway_di" bpmnElement="Flow_ToCarGateway">
-        <di:waypoint x="1116" y="278"/>
-        <di:waypoint x="1165" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_CarSuccess_di" bpmnElement="Flow_CarSuccess">
-        <di:waypoint x="1215" y="278"/>
-        <di:waypoint x="1280" y="278"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_CarFailed_di" bpmnElement="Flow_CarFailed">
-        <di:waypoint x="1190" y="303"/>
-        <di:waypoint x="1190" y="380"/>
-      </bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="Flow_CancelHotelToCancelFlight_di" bpmnElement="Flow_CancelHotelToCancelFlight">
-        <di:waypoint x="1190" y="460"/>
-        <di:waypoint x="1190" y="500"/>
+        <di:waypoint x="380" y="336"/><di:waypoint x="380" y="400"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToEndHotelFailed_di" bpmnElement="Flow_ToEndHotelFailed">
-        <di:waypoint x="900" y="420"/>
-        <di:waypoint x="950" y="420"/>
+        <di:waypoint x="430" y="440"/><di:waypoint x="490" y="440"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCallCar_di" bpmnElement="Flow_ToCallCar">
+        <di:waypoint x="430" y="278"/><di:waypoint x="500" y="278"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_CarFailed_di" bpmnElement="Flow_CarFailed">
+        <di:waypoint x="550" y="336"/><di:waypoint x="550" y="400"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToCancelFlight_FromCar_di" bpmnElement="Flow_ToCancelFlight_FromCar">
+        <di:waypoint x="550" y="480"/><di:waypoint x="550" y="520"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToEndCarFailed_di" bpmnElement="Flow_ToEndCarFailed">
-        <di:waypoint x="1240" y="540"/>
-        <di:waypoint x="1290" y="540"/>
+        <di:waypoint x="600" y="560"/><di:waypoint x="660" y="560"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToEndSuccess_di" bpmnElement="Flow_ToEndSuccess">
+        <di:waypoint x="600" y="278"/><di:waypoint x="660" y="278"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

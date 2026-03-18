@@ -1,5 +1,9 @@
 package io.orqueio.example.carrental.kafka;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.orqueio.example.carrental.model.CarRentalPayload;
+import io.orqueio.example.carrental.model.WorkerMessage;
+import io.orqueio.example.carrental.model.WorkerResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class CarRentalConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(CarRentalConsumer.class);
-    private final KafkaTemplate<String, Map<String, Object>> kafkaTemplate;
+    private final KafkaTemplate<String, WorkerResponse> kafkaTemplate;
+    private final ObjectMapper objectMapper;
 
     // Simulated car availability per destination
     private final ConcurrentHashMap<String, Integer> availableCars = new ConcurrentHashMap<>(Map.of(
@@ -23,32 +28,33 @@ public class CarRentalConsumer {
     ));
     private final ConcurrentHashMap<String, String> reservations = new ConcurrentHashMap<>();
 
-    public CarRentalConsumer(KafkaTemplate<String, Map<String, Object>> kafkaTemplate) {
+    public CarRentalConsumer(KafkaTemplate<String, WorkerResponse> kafkaTemplate, ObjectMapper objectMapper) {
         this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @KafkaListener(topics = "saga.car.command", groupId = "car-rental-service")
-    public void onCommand(Map<String, Object> command) {
-        String action = (String) command.get("action");
-        String bookingId = (String) command.get("bookingId");
-        String processInstanceId = (String) command.get("processInstanceId");
-        String travelerName = (String) command.getOrDefault("travelerName", "Unknown");
-        String destination = (String) command.getOrDefault("destination", "Paris");
-        String departureDate = (String) command.getOrDefault("departureDate", "");
-        String returnDate = (String) command.getOrDefault("returnDate", "");
+    public void onCommand(WorkerMessage command) {
+        try {
+            CarRentalPayload payload = objectMapper.readValue(command.getPayload(), CarRentalPayload.class);
 
-        if ("EXECUTE".equals(action)) {
-            handleRental(bookingId, processInstanceId, travelerName, destination, departureDate, returnDate);
-        } else if ("COMPENSATE".equals(action)) {
-            handleCancellation(bookingId, processInstanceId, destination);
+            if ("EXECUTE".equals(command.getAction())) {
+                handleRental(command.getCorrelationId(), payload);
+            } else if ("COMPENSATE".equals(command.getAction())) {
+                handleCancellation(command.getCorrelationId(), payload.getBookingId(), payload.getDestination());
+            }
+        } catch (Exception e) {
+            log.error("[CAR-RENTAL] Error processing command", e);
         }
     }
 
-    private void handleRental(String bookingId, String processInstanceId,
-                              String travelerName, String destination,
-                              String departureDate, String returnDate) {
+    private void handleRental(String correlationId, CarRentalPayload payload) {
+        String bookingId = payload.getBookingId();
+        String destination = payload.getDestination();
+
         log.info("[CAR-RENTAL] Renting car in {} for '{}' ({} to {}), booking {}",
-                destination, travelerName, departureDate, returnDate, bookingId);
+                destination, payload.getTravelerName(), payload.getDepartureDate(),
+                payload.getReturnDate(), bookingId);
 
         int cars = availableCars.getOrDefault(destination, 0);
         boolean success = cars > 0;
@@ -59,17 +65,17 @@ public class CarRentalConsumer {
             reservations.put(bookingId, destination);
             String rentalCode = "CAR-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
             message = String.format("Car rented in %s. Confirmation: %s. Pickup: %s, Return: %s",
-                    destination, rentalCode, departureDate, returnDate);
+                    destination, rentalCode, payload.getDepartureDate(), payload.getReturnDate());
             log.info("[CAR-RENTAL] {} - {}", bookingId, message);
         } else {
             message = String.format("No cars available in %s", destination);
             log.warn("[CAR-RENTAL] {} - {}", bookingId, message);
         }
 
-        sendResponse(bookingId, processInstanceId, success, message);
+        sendResponse(correlationId, bookingId, success, message);
     }
 
-    private void handleCancellation(String bookingId, String processInstanceId, String destination) {
+    private void handleCancellation(String correlationId, String bookingId, String destination) {
         log.info("[CAR-RENTAL-COMPENSATE] Cancelling car rental for booking {}", bookingId);
 
         String reserved = reservations.remove(bookingId);
@@ -78,14 +84,11 @@ public class CarRentalConsumer {
             log.info("[CAR-RENTAL-COMPENSATE] Restored 1 car in {}", reserved);
         }
 
-        sendResponse(bookingId, processInstanceId, true, "Car rental cancelled");
+        sendResponse(correlationId, bookingId, true, "Car rental cancelled");
     }
 
-    private void sendResponse(String bookingId, String processInstanceId, boolean success, String message) {
-        Map<String, Object> response = Map.of(
-                "bookingId", bookingId, "processInstanceId", processInstanceId,
-                "success", success, "message", message, "serviceName", "car-rental-service"
-        );
+    private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
+        WorkerResponse response = new WorkerResponse(correlationId, success, message);
         kafkaTemplate.send("saga.car.response", bookingId, response);
     }
 }
