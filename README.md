@@ -1,6 +1,6 @@
 # OrqueIO Example - Travel Booking Saga
 
-[![OrqueIO](https://img.shields.io/badge/OrqueIO-1.0.4-blue.svg)](https://orqueio.io)
+[![OrqueIO](https://img.shields.io/badge/OrqueIO-1.0.3-blue.svg)](https://orqueio.io)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.9-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -181,7 +181,7 @@ Access the process monitoring UI at: `http://localhost:8090/camunda/app/cockpit/
 
 ## Technology Stack
 
-- **OrqueIO** 1.0.4
+- **OrqueIO** 1.0.3
 - **Spring Boot** 3.5.9
 - **Apache Kafka** (Confluent 7.5.0)
 - **Java** 21
