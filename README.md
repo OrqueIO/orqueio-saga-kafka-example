@@ -1,7 +1,7 @@
 # OrqueIO Example - Travel Booking Saga
 
 [![OrqueIO](https://img.shields.io/badge/OrqueIO-1.0.8-blue.svg)](https://orqueio.io)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.9-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.11-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
