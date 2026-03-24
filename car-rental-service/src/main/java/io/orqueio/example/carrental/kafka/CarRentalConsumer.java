@@ -1,6 +1,5 @@
 package io.orqueio.example.carrental.kafka;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.orqueio.example.carrental.model.CarRentalPayload;
 import io.orqueio.example.carrental.model.WorkerMessage;
 import io.orqueio.example.carrental.model.WorkerResponse;
@@ -9,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 import java.util.UUID;
