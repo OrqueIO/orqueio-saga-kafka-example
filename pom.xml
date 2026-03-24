@@ -21,8 +21,8 @@
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
-        <spring-boot.version>4.0.2</spring-boot.version>
-        <orqueio.version>2.0.2</orqueio.version>
+        <spring-boot.version>4.0.3</spring-boot.version>
+        <orqueio.version>2.0.3</orqueio.version>
     </properties>
 
     <dependencyManagement>
