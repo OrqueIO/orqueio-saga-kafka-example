@@ -1,6 +1,5 @@
 package io.orqueio.example.hotel.kafka;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.orqueio.example.hotel.model.WorkerMessage;
 import io.orqueio.example.hotel.model.WorkerResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 

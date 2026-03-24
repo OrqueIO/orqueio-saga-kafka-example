@@ -1,5 +1,6 @@
 package io.orqueio.example.travel.config;
 
+
 import io.orqueio.example.travel.model.WorkerMessage;
 import io.orqueio.example.travel.model.WorkerResponse;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
