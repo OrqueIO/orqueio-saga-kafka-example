@@ -15,7 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class CarRentalConsumer {
+public class  CarRentalConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(CarRentalConsumer.class);
     private final KafkaTemplate<String, WorkerResponse> kafkaTemplate;
@@ -52,10 +52,6 @@ public class CarRentalConsumer {
         String bookingId = payload.getBookingId();
         String destination = payload.getDestination();
 
-        log.info("[CAR-RENTAL] Renting car in {} for '{}' ({} to {}), booking {}",
-                destination, payload.getTravelerName(), payload.getDepartureDate(),
-                payload.getReturnDate(), bookingId);
-
         int cars = availableCars.getOrDefault(destination, 0);
         boolean success = cars > 0;
         String message;
@@ -76,15 +72,11 @@ public class CarRentalConsumer {
     }
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
-        log.info("[CAR-RENTAL-COMPENSATE] Cancelling car rental for booking {}", bookingId);
-
         String reserved = reservations.remove(bookingId);
         if (reserved != null) {
             availableCars.merge(reserved, 1, Integer::sum);
-            log.info("[CAR-RENTAL-COMPENSATE] Restored 1 car in {}", reserved);
+            log.info("[CAR-RENTAL-COMPENSATE] {} - Restored 1 car in {}", bookingId, reserved);
         }
-
-        sendResponse(correlationId, bookingId, true, "Car rental cancelled");
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {

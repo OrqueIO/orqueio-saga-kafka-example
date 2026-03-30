@@ -13,7 +13,7 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
 
-camunda:
+orqueio:
   bpm:
     admin-user:
       id: demo

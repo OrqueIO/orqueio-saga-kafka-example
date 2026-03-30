@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
+@EnableKafka
 public class KafkaConfig {
 
     @Value("${spring.kafka.bootstrap-servers}")
@@ -44,12 +46,13 @@ public class KafkaConfig {
 
     @Bean
     public ConsumerFactory<String, WorkerMessage> consumerFactory() {
-        JsonDeserializer<WorkerMessage> jsonDeserializer = new JsonDeserializer<>(WorkerMessage.class);
-        jsonDeserializer.addTrustedPackages("io.orqueio.example.*");
+        JsonDeserializer<WorkerMessage> jsonDeserializer = new JsonDeserializer<>(WorkerMessage.class, false);
+        jsonDeserializer.addTrustedPackages("*");
+        jsonDeserializer.setUseTypeHeaders(false);
 
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "car-rental-service");
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "hotel-service");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
         return new DefaultKafkaConsumerFactory<>(
