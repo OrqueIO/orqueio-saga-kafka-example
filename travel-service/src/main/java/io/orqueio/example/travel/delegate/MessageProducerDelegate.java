@@ -35,7 +35,13 @@ public class MessageProducerDelegate implements JavaDelegate {
         String action = (String) execution.getVariable("workerAction");
         String bookingId = (String) execution.getVariable("bookingId");
 
-        // Build business payload from process variables
+        if (commandTopic == null) {
+            throw new RuntimeException("commandTopic variable is null");
+        }
+        if (action == null) {
+            throw new RuntimeException("workerAction variable is null");
+        }
+
         Map<String, Object> payloadMap = new HashMap<>();
         payloadMap.put("bookingId", bookingId);
         payloadMap.put("travelerName", execution.getVariable("travelerName"));
@@ -46,9 +52,7 @@ public class MessageProducerDelegate implements JavaDelegate {
         payloadMap.put("budget", execution.getVariable("budget"));
 
         String jsonPayload = objectMapper.writeValueAsString(payloadMap);
-
-        WorkerMessage message = new WorkerMessage(
-                execution.getProcessInstanceId(), action, jsonPayload);
+        WorkerMessage message = new WorkerMessage(execution.getProcessInstanceId(), action, jsonPayload);
 
         log.info("[CALL-WORKER] Sending {} to topic '{}' for booking {}", action, commandTopic, bookingId);
         kafkaTemplate.send(commandTopic, bookingId, message);

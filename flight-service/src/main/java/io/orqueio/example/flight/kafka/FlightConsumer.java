@@ -53,9 +53,6 @@ public class FlightConsumer {
         String destination = payload.getDestination();
         int passengers = payload.getPassengers();
 
-        log.info("[FLIGHT] Booking {} seat(s) to {} for '{}', booking {}",
-                passengers, destination, payload.getTravelerName(), bookingId);
-
         int seats = availableSeats.getOrDefault(destination, 0);
         boolean success = seats >= passengers;
         String message;
@@ -77,15 +74,11 @@ public class FlightConsumer {
     }
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
-        log.info("[FLIGHT-COMPENSATE] Cancelling flight for booking {}", bookingId);
-
         Integer reserved = reservations.remove(bookingId);
         if (reserved != null) {
             availableSeats.merge(destination, reserved, Integer::sum);
-            log.info("[FLIGHT-COMPENSATE] Restored {} seat(s) to {}", reserved, destination);
+            log.info("[FLIGHT-COMPENSATE] {} - Restored {} seat(s) to {}", bookingId, reserved, destination);
         }
-
-        sendResponse(correlationId, bookingId, true, "Flight cancelled");
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {

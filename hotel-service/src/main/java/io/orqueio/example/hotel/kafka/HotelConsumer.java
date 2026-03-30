@@ -57,9 +57,6 @@ public class HotelConsumer {
         String destination = payload.getDestination();
         double budget = payload.getBudget();
 
-        log.info("[HOTEL] Booking hotel in {} for '{}', budget: {} EUR, booking {}",
-                destination, payload.getTravelerName(), budget, bookingId);
-
         double rate = roomRates.getOrDefault(destination, 150.0);
         int rooms = availableRooms.getOrDefault(destination, 0);
         boolean success;
@@ -88,15 +85,11 @@ public class HotelConsumer {
     }
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
-        log.info("[HOTEL-COMPENSATE] Cancelling hotel for booking {}", bookingId);
-
         String reserved = reservations.remove(bookingId);
         if (reserved != null) {
             availableRooms.merge(reserved, 1, Integer::sum);
-            log.info("[HOTEL-COMPENSATE] Restored 1 room in {}", reserved);
+            log.info("[HOTEL-COMPENSATE] {} - Restored 1 room in {}", bookingId, reserved);
         }
-
-        sendResponse(correlationId, bookingId, true, "Hotel reservation cancelled");
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
