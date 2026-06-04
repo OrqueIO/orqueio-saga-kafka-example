@@ -75,10 +75,15 @@ public class FlightConsumer {
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
         Integer reserved = reservations.remove(bookingId);
+        String message;
         if (reserved != null) {
             availableSeats.merge(destination, reserved, Integer::sum);
+            message = String.format("Flight cancelled: Restored %d seat(s) to %s", reserved, destination);
             log.info("[FLIGHT-COMPENSATE] {} - Restored {} seat(s) to {}", bookingId, reserved, destination);
+        } else {
+            message = String.format("Flight cancellation: No reservation found for %s", bookingId);
         }
+        sendResponse(correlationId, bookingId, true, message);
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {

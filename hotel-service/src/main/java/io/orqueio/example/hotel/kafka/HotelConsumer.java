@@ -86,10 +86,15 @@ public class HotelConsumer {
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
         String reserved = reservations.remove(bookingId);
+        String message;
         if (reserved != null) {
             availableRooms.merge(reserved, 1, Integer::sum);
+            message = String.format("Hotel cancelled: Restored 1 room in %s", reserved);
             log.info("[HOTEL-COMPENSATE] {} - Restored 1 room in {}", bookingId, reserved);
+        } else {
+            message = String.format("Hotel cancellation: No reservation found for %s", bookingId);
         }
+        sendResponse(correlationId, bookingId, true, message);
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
