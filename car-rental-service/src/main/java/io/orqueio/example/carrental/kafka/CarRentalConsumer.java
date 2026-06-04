@@ -73,10 +73,15 @@ public class  CarRentalConsumer {
 
     private void handleCancellation(String correlationId, String bookingId, String destination) {
         String reserved = reservations.remove(bookingId);
+        String message;
         if (reserved != null) {
             availableCars.merge(reserved, 1, Integer::sum);
+            message = String.format("Car rental cancelled: Restored 1 car in %s", reserved);
             log.info("[CAR-RENTAL-COMPENSATE] {} - Restored 1 car in {}", bookingId, reserved);
+        } else {
+            message = String.format("Car rental cancellation: No reservation found for %s", bookingId);
         }
+        sendResponse(correlationId, bookingId, true, message);
     }
 
     private void sendResponse(String correlationId, String bookingId, boolean success, String message) {
