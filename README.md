@@ -181,7 +181,7 @@ Access the process monitoring UI at: `http://localhost:8090/camunda/app/cockpit/
 
 ## Technology Stack
 
-- **OrqueIO** 1.0.8 
+- **OrqueIO** 1.0.9 
 - **Spring Boot** 3.5.11
 - **Apache Kafka** (Confluent 7.5.0)
 - **Java** 21
